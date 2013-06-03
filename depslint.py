@@ -43,16 +43,17 @@ _IMPLICIT_DEPS_MATCHERS = []
 
 _module_path = os.path.join(os.getcwd(), __file__)
 
-global _verbose
 _verbose = 0
 
-global _logfile
 _logfile = None
+
+
 def _set_logger(filename):
     if not filename:
         filename = '/dev/null'
     global _logfile
     _logfile = open(filename, "w")
+
 
 def log_msg(level, msg, trunc_lines=True, ansi=None, fd=sys.stdout):
     if _verbose < 0:
@@ -67,7 +68,7 @@ def log_msg(level, msg, trunc_lines=True, ansi=None, fd=sys.stdout):
         if ansi:
             _ANSI_END = '\033[0m'
             msg = ansi + msg + _ANSI_END
-        print >>fd, msg
+        print >> fd, msg
         fd.flush()
         return
 
@@ -111,8 +112,10 @@ def debug(msg):
     msg = "DEBUG: %s" % msg
     log_msg(0, msg, ansi='\033[1;34m')
 
+
 def is_ignored(target):
     return any(target.endswith(suffix) for suffix in _IGNORED_SUFFICES)
+
 
 def match_implicit_dependency(dep, targets):
     """Verify if any of paths in 'targets' depends implicitly on 'dep'
@@ -127,17 +130,21 @@ def match_implicit_dependency(dep, targets):
                 return t
     return None
 
+
 def trc_filter_ignored(targets):
     return [t for t in targets if not is_ignored(t)]
 
+
 def norm_paths(paths):
     return [os.path.normpath(p) for p in paths]
+
 
 def sets_union(iterable_of_sets):
     u = set()
     for s in iterable_of_sets:
         u.update(s)
     return u
+
 
 class DepfileParser(object):
     _depfile_parse_re = re.compile(r'\s*(?P<targets>.*?)\s*'
@@ -162,12 +169,13 @@ class DepfileParser(object):
     def _unescape(self, string):
         return re.sub(self._depfile_unescape_re, r'\1', string)
 
+
 class BuildRule(object):
-    def __init__(self, targets, deps, depfile_deps=[], order_only_deps=[], rule_name=""):
+    def __init__(self, targets, deps, depfile_deps=None, order_only_deps=None, rule_name=""):
         self.targets = targets
         self.deps = deps
-        self.depfile_deps = list(depfile_deps)
-        self.order_only_deps = list(order_only_deps)
+        self.depfile_deps = list(depfile_deps or [])
+        self.order_only_deps = list(order_only_deps or [])
         self.rule_name = rule_name
 
     def __str__(self):
@@ -176,13 +184,14 @@ class BuildRule(object):
             self.deps, self.depfile_deps,
             self.order_only_deps)
 
+
 class TraceParser(object):
-    def __init__(self, input):
-        self.input = input
+    def __init__(self, input_content):
+        self.input = input_content
         self.lineno = 0
 
-    def _iterate_target_rules(self, input):
-        for self.lineno, line in enumerate(input, start=1):
+    def _iterate_target_rules(self, input_content):
+        for self.lineno, line in enumerate(input_content, start=1):
             tok = eval(line)
             targets = trc_filter_ignored(tok['OUT'])
             deps = trc_filter_ignored(tok['IN'])
@@ -193,9 +202,10 @@ class TraceParser(object):
     def iterate_target_rules(self):
         return self._iterate_target_rules(self.input)
 
+
 class NinjaManifestParser(object):
-    def __init__(self, input):
-        self.input = input
+    def __init__(self, input_content):
+        self.input = input_content
         self.lineno = 0
 
         self.global_attributes = dict()
@@ -235,7 +245,8 @@ class NinjaManifestParser(object):
             else:
                 self._handle_globals(blk)
 
-    def _read_depfile(self, path):
+    @staticmethod
+    def _read_depfile(path):
         if not os.path.isfile(path):
             return None
         return file(path).read()
@@ -288,10 +299,10 @@ class NinjaManifestParser(object):
         # Just skipping over
         pass
 
-    def _handle_include(self, blk):
+    def _handle_include(self, _blk):
         fatal("'include' keyword support not implemented, wanna help?")
 
-    def _handle_subninja(blk):
+    def _handle_subninja(self, _blk):
         fatal("'subninja' keyword support not implemented, wanna help?")
 
     def _check_required_version(self, attrs):
@@ -300,8 +311,8 @@ class NinjaManifestParser(object):
         self.ninja_required_version = float(attrs.get('ninja_required_version', 0))
         V2("** ninja_required_version: %r" % self.ninja_required_version)
         if self.ninja_required_version > _SUPPORTED_NINJA_VER:
-            warn("Ninja version required in manifest is newer than supported (%r vs %r)",
-                 self.ninja_required_version, _SUPPORTED_NINJA_VER)
+            warn("Ninja version required in manifest is newer than supported (%r vs %r)" %
+                 (self.ninja_required_version, _SUPPORTED_NINJA_VER))
             warn("Trying to continue but the results may be meaningless...")
 
     _build_re = re.compile(r'build\s+(?P<out>.+)\s*'+
@@ -402,8 +413,9 @@ class NinjaManifestParser(object):
         ins, implicit, order = match.group('in'), match.group('deps'), match.group('ord')
         return (ins or "", implicit or "", order or "")
 
-    def _unescape(self, string):
-        # Unescape '$ ', '$:', '$$' sequences
+    @staticmethod
+    def _unescape(string):
+        """Unescapes '$ ', '$:', '$$' sequences."""
         return re.sub(r'\$([ :$])', r'\1', string)
 
     _deps_sep_re = re.compile(r'(?<!\$)\s+') # Unescaped spaces
@@ -444,12 +456,14 @@ class NinjaManifestParser(object):
         attribute_val = scope.get(attribute, "")
         return self._unescape(self._eval_attribute(scope, attribute_val))
 
+
 class Edge(object):
     def __init__(self, provides, requires, is_phony):
         self.provides = frozenset(provides)
         self.requires = frozenset(requires)
         self.is_phony = is_phony
         self.rank = None
+
 
 class Graph(object):
     def __init__(self, from_brules, targets_wanted, is_clean_build_graph):
@@ -569,7 +583,7 @@ class Graph(object):
                 yield tpath
 
     def sorted_by_products_num(self, targets, reverse=False):
-        def by_products(x,y):
+        def by_products(x, y):
             return cmp(len(self.get_product_rules_closure(x)), len(self.get_product_rules_closure(y)))
         return sorted(targets, cmp=by_products, reverse=reverse)
 
@@ -614,7 +628,8 @@ class Graph(object):
             self.targets_by_ranks[rank].add(t)
         return rank
 
-    def _is_wanted(self, edge):
+    @staticmethod
+    def _is_wanted(edge):
         return edge.rank is not None
 
     def _calc_products_closure_in_tree(self):
@@ -647,11 +662,13 @@ class Graph(object):
         self.target_products_closure[source] = my_products
         return my_products
 
-def create_graph(path, parser, targets=[], clean_build_graph=False):
+
+def create_graph(path, parser, targets=None, clean_build_graph=False):
     info("Building %s graph for '%s'.." % (
         "order-only" if clean_build_graph else "dependency", path))
-    g = Graph(parser.iterate_target_rules(), targets, clean_build_graph)
+    g = Graph(parser.iterate_target_rules(), targets or [], clean_build_graph)
     return g
+
 
 def load_config(path):
     if not os.path.isfile(path):
@@ -665,7 +682,7 @@ def load_config(path):
         # TODO: give more helpful errors
         fatal("Error loading configuration file: %r" % e)
 
-    info("Loaded configuration file: %r" % config_path)
+    info("Loaded configuration file: %r" % path)
     if conf.get('IGNORED_SUFFICES'):
         global _IGNORED_SUFFICES
         _IGNORED_SUFFICES = list(conf.get('IGNORED_SUFFICES'))
@@ -677,6 +694,7 @@ def load_config(path):
         V1("Set implicit matchers to: %r" % impl_deps)
 
     return conf
+
 
 def compare_dependencies(trace_graph, manifest_graph, clean_build):
     missing = defaultdict(list)
@@ -705,13 +723,15 @@ def compare_dependencies(trace_graph, manifest_graph, clean_build):
             missing[tp].append(dep)
     return missing, ignored_missing
 
+
 def print_excessive_manifest_dependencies(manifest_graph, trace_graph):
-    manifest_targets = set(manifest_graph.target_deps_closure.iterkeys())
-    traced_targets = set(trace_graph.target_deps_closure.iterkeys())
+    manifest_targets = set(manifest_graph.target_deps_closure)
+    traced_targets = set(trace_graph.target_deps_closure)
     excessive_by_targets = defaultdict(list)
     for x in sorted(manifest_targets - traced_targets):
-        if ninja_incremental_graph.is_phony_target(x):
-            continue
+        # TODO(maruel): ???
+        #if ninja_incremental_graph.is_phony_target(x):
+        #    continue
         path_to_top = manifest_graph.get_any_path_to_top(x)
         immediate_parent = path_to_top[0]
         excessive_by_targets[immediate_parent].append(x)
@@ -726,42 +746,47 @@ def print_excessive_manifest_dependencies(manifest_graph, trace_graph):
         V1("%s (%d excessive deps): %r {> '%s'}" % (t, len(deps), deps, "' > '".join(path_to_top)))
     return excessive_by_targets
 
-def print_missing_dependencies(manifest_graph, missing, ignored_missing, clean_build):
-    dtype="ORDER " if clean_build else ""
+
+def print_missing_dependencies(missing, ignored_missing, clean_build):
+    dtype = "ORDER " if clean_build else ""
     for t, t_deps in missing.iteritems():
         error("target '%s' is missing %sdependencies on: %r" % (t, dtype, t_deps))
         #TODO: print path from t to top in verbose mode?
 
     if ignored_missing:
-        warn("%sDependency errors inhibited for %d targets due to implicit dependency rules" % (dtype, len(ignored_missing)))
+        warn("%sDependency errors inhibited for %d targets due to implicit dependency rules" %
+             (dtype, len(ignored_missing)))
     for t, t_ignored_deps in ignored_missing.iteritems():
         V1("Ignoring missing %sdependencies of '%s' on %r" % (dtype, t, t_ignored_deps))
         #TODO: print path from t to top in verbose mode?
+
 
 def print_targets_by_ranks(graph):
     for rank in sorted(graph.targets_by_ranks.keys(), reverse=True):
         lst = ", ".join(graph.targets_by_ranks[rank])
         V0("Rank %2d: %5d targets) [%s]" % (rank, len(graph.targets_by_ranks[rank]), lst))
 
+
 def print_targets_by_depending_products(graph):
     static_wanted_sources = graph.targets_by_ranks[0]
     nonstatic_wanted_rules = list(e for e in graph.target2edge.itervalues() if e.rank)
-    bins = [list() for x in xrange(0,10)]
+    bins = [[] for _ in xrange(10)]
     for t in graph.sorted_by_products_num(static_wanted_sources, reverse=True):
         score = len(graph.get_product_rules_closure(t))
         prct = score*100.0/len(nonstatic_wanted_rules)
-        bin = int(prct / 10)
-        bins[bin].append((t, score, prct))
+        bin_value = int(prct / 10)
+        bins[bin_value].append((t, score, prct))
         V2("%5d (%2.0f%%): %r" % (score, prct, t))
-    for i, bin in enumerate(bins):
-        if not bin:
+    for i, bin_value in enumerate(bins):
+        if not bin_value:
             continue
         V0("[%2d-%2d%%]: %5d targets [%s]" % (
-            10*i, 10*i+10, len(bin),
-            ", ".join("%s(%d%%)" % (b[0], b[2]) for b in bin)))
+            10*i, 10*i+10, len(bin_value),
+            ", ".join("%s(%d%%)" % (b[0], b[2]) for b in bin_value)))
     return bins
 
-if __name__ == '__main__':
+
+def main():
     parser = argparse.ArgumentParser(prog='depslint')
     parser.add_argument('-C', dest='dir', help='change to DIR before doing anything else')
     parser.add_argument('-f', dest='manifest', default=_DEFAULT_MANIFEST, help='specify input ninja manifest')
@@ -774,6 +799,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Set global verbosity level
+    global _verbose
     _verbose = args.verbose
     _set_logger(filename='depslint.log')
 
@@ -817,7 +843,7 @@ if __name__ == '__main__':
     missing, ignored = compare_dependencies(trace_graph, ninja_clean_build_graph, clean_build=True)
     if missing or ignored:
         info("Errors: %d, Ignored: %d" % (len(missing), len(ignored)))
-        print_missing_dependencies(ninja_clean_build_graph, missing, ignored, clean_build=True)
+        print_missing_dependencies(missing, ignored, clean_build=True)
     else:
         info("No issues!")
 
@@ -827,7 +853,7 @@ if __name__ == '__main__':
     missing, ignored = compare_dependencies(trace_graph, ninja_incremental_graph, clean_build=False)
     if missing or ignored:
         info("Errors: %d, Ignored: %d" % (len(missing), len(ignored)))
-        print_missing_dependencies(ninja_incremental_graph, missing, ignored, clean_build=False)
+        print_missing_dependencies(missing, ignored, clean_build=False)
     else:
         info("No issues!")
 
@@ -865,6 +891,9 @@ if __name__ == '__main__':
         print_targets_by_depending_products(ninja_incremental_graph)
 
     info("=== That's all! ===")
-    sys.exit(0)
+    return 0
 
-    # TODO: try-except..
+
+if __name__ == '__main__':
+    sys.exit(main())
+
