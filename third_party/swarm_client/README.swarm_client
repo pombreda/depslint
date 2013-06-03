@@ -1,0 +1,13 @@
+Name: Swarm client library
+Short Name: swarm_client
+URL: chromium.org
+Date: 2013-05-25
+Revision: 201600 + modifications
+License: BSD
+License File: LICENSE
+
+Description:
+Multiplatform tracing tool.
+
+Local Modifications:
+Removed everything except trace_inputs.py.
